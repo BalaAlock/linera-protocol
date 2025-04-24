@@ -69,7 +69,7 @@ impl chain_listener::ClientContext for ClientContext {
             chain.timestamp,
             chain.next_block_height,
             chain.pending_proposal.clone(),
-            preferred_owner.map(Into::into),
+            preferred_owner,
         ))
     }
 
@@ -88,6 +88,10 @@ impl chain_listener::ClientContext for ClientContext {
                 next_block_height: BlockHeight::ZERO,
                 pending_proposal: None,
             });
+
+            if let Some(owner) = owner {
+                self.wallet.assigned_keys.insert(chain_id, owner);
+            }
         }
 
         Ok(())

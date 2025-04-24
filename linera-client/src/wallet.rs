@@ -25,8 +25,8 @@ use crate::{config::GenesisConfig, error, Error};
 #[derive(Serialize, Deserialize)]
 pub struct Wallet {
     pub chains: BTreeMap<ChainId, UserChain>,
-    pub unassigned_keys: BTreeSet<AccountPublicKey>,
-    pub assigned_keys: BTreeMap<ChainId, AccountPublicKey>,
+    pub unassigned_keys: BTreeSet<AccountOwner>,
+    pub assigned_keys: BTreeMap<ChainId, AccountOwner>,
     pub default: Option<ChainId>,
     pub genesis_config: GenesisConfig,
 }
@@ -60,16 +60,9 @@ impl Wallet {
         }
 
         if let Some(configured_owner) = chain.owner {
-            let Some(key) = self.find_key(configured_owner) else {
-                tracing::error!(
-                    ?configured_owner,
-                    chain_id = ?chain.chain_id,
-                    "Trying to insert a chain with an unknown owner"
-                );
-                panic!("Unknown owner of owned chain");
-            };
-            self.assigned_keys.insert(chain.chain_id, key);
+            self.assigned_keys.insert(chain.chain_id, configured_owner);
         }
+
         self.chains.insert(chain.chain_id, chain);
     }
 
@@ -127,7 +120,7 @@ impl Wallet {
     }
 
     pub fn add_unassigned_key_pair(&mut self, public_key: AccountPublicKey) {
-        self.unassigned_keys.insert(public_key);
+        self.unassigned_keys.insert(AccountOwner::from(public_key));
     }
 
     pub fn assign_new_chain_to_owner(
@@ -136,20 +129,19 @@ impl Wallet {
         chain_id: ChainId,
         timestamp: Timestamp,
     ) -> Result<(), Error> {
-        if let Some(key) = self.find_key(owner) {
-            let user_chain = UserChain {
-                chain_id,
-                owner: Some(key.into()),
-                block_hash: None,
-                timestamp,
-                next_block_height: BlockHeight(0),
-                pending_proposal: None,
-            };
-            self.insert(user_chain);
-            Ok(())
-        } else {
-            Err(error::Inner::NonexistentKeypair(chain_id).into())
+        if !self.unassigned_keys.remove(&owner) {
+            return Err(error::Inner::NonexistentKeypair(chain_id).into());
         }
+        let user_chain = UserChain {
+            chain_id,
+            owner: Some(owner),
+            block_hash: None,
+            timestamp,
+            next_block_height: BlockHeight(0),
+            pending_proposal: None,
+        };
+        self.insert(user_chain);
+        Ok(())
     }
 
     pub fn set_default_chain(&mut self, chain_id: ChainId) -> Result<(), Error> {
@@ -170,11 +162,7 @@ impl Wallet {
         S: Storage + Clone + Send + Sync + 'static,
     {
         let client_owner = chain_client.preferred_owner();
-        let wallet_owner = self
-            .assigned_keys
-            .get(&chain_client.chain_id())
-            .cloned()
-            .map(Into::into);
+        let wallet_owner = self.assigned_keys.get(&chain_client.chain_id()).cloned();
         if client_owner != wallet_owner {
             warn!(
                 ?client_owner,
@@ -200,33 +188,6 @@ impl Wallet {
 
     pub fn genesis_config(&self) -> &GenesisConfig {
         &self.genesis_config
-    }
-
-    /// Returns a public key for the given owner, if it is known to the wallet.
-    fn find_key(&mut self, owner: AccountOwner) -> Option<AccountPublicKey> {
-        let already_assigned = self
-            .assigned_keys
-            .iter()
-            .find(|(_chain_id, public_key)| AccountOwner::from(**public_key) == owner)
-            .map(|(_chain_id, public_key)| *public_key);
-
-        if let Some(assigned_key) = already_assigned {
-            Some(assigned_key)
-        } else {
-            let unassigned = self
-                .unassigned_keys
-                .iter()
-                .find(|public_key| AccountOwner::from(**public_key) == owner)
-                .cloned();
-
-            match unassigned {
-                None => None,
-                Some(unassigned) => {
-                    self.unassigned_keys.remove(&unassigned);
-                    Some(unassigned)
-                }
-            }
-        }
     }
 }
 

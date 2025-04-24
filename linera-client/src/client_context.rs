@@ -291,7 +291,7 @@ where
             timestamp,
             next_block_height,
             pending_proposal,
-            preferred_owner.map(Into::into),
+            preferred_owner,
         );
         chain_client.options_mut().message_policy = MessagePolicy::new(
             self.blanket_message_policy,
