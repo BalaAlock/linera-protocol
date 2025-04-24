@@ -83,10 +83,8 @@ APP_ID=$(linera -w1 --wait-for-outgoing-messages \
         \"blockDelay\": 100000000
     }")
 
-OWNER_1_TMP=$(linera -w1 keygen)
-OWNER_1=$(echo $OWNER_1_TMP | grep 'Owner:' | cut -d':' -f2 | xargs)
-OWNER_2_TMP=$(linera -w2 keygen)
-OWNER_2=$(echo $OWNER_2_TMP | grep 'Owner:' | cut -d':' -f2 | xargs)
+OWNER_1=$(linera -w1 keygen)
+OWNER_2=$(linera -w2 keygen)
 
 linera -w1 service --port 8080 &
 sleep 1

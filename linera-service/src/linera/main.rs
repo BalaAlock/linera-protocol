@@ -2020,8 +2020,7 @@ async fn run(options: &ClientOptions) -> Result<i32, Error> {
             wallet
                 .mutate(|w| w.add_unassigned_key_pair(public_key))
                 .await?;
-            println!("Public key: {}", public_key);
-            println!("Owner: {}", owner);
+            println!("{}", owner);
             info!("Key generated in {} ms", start_time.elapsed().as_millis());
             Ok(0)
         }

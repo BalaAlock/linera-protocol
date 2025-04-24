@@ -926,16 +926,7 @@ impl ClientWrapper {
             .arg("keygen")
             .spawn_and_wait_for_stdout()
             .await?;
-        // The output of `keygen` command is structured as follows:
-        // Public key: <public_key>
-        // Owner: <account_owner>
-        let owner_str = stdout
-            .lines()
-            .find(|line| line.trim_start().starts_with("Owner:"))
-            .and_then(|line| line.split(':').nth(1))
-            .map(|s| s.trim())
-            .ok_or_else(|| anyhow::anyhow!("Failed to find owner in keygen output: {stdout}"))?;
-        AccountOwner::from_str(owner_str)
+        AccountOwner::from_str(stdout.as_str().trim())
     }
 
     /// Returns the default chain.
