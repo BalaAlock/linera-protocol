@@ -78,7 +78,13 @@ mod in_mem {
         pub fn generate_new(&mut self) -> AccountPublicKey {
             let mut inner = self.0.write().unwrap();
             let secret = AccountSecretKey::generate_from(&mut inner.rng_state.prng);
-            inner.rng_state.keys_generated = inner.rng_state.keys_generated.checked_add(1).unwrap();
+            if inner.rng_state.testing_seed.is_some() {
+                // Generate a new testing seed for the case when we need to store the PRNG state.
+                // It provides a "forward-secrecy" property for the testing seed.
+                // We do not do that for the case when `testing_seed` is `None`, because
+                // we default to the usage of OsRng in that case.
+                inner.rng_state.testing_seed = Some(inner.rng_state.prng.next_u64());
+            }
             let public = secret.public();
             let owner = AccountOwner::from(public);
             inner.keys.insert(owner, secret);
@@ -102,24 +108,18 @@ mod in_mem {
     #[cfg(with_getrandom)]
     struct RngState {
         prng: Box<dyn CryptoRng>,
-        // Kept around for deterministic reconstruction of the RNG
-        // across the persistence boundary.
-        initial_prng_seed: Option<u64>,
-        keys_generated: u64,
+        #[cfg(with_getrandom)]
+        testing_seed: Option<u64>,
     }
 
     #[cfg(with_getrandom)]
     impl RngState {
-        fn new(prng_seed: Option<u64>, keys_generated: u64) -> Self {
-            let mut prng: Box<dyn CryptoRng> = prng_seed.into();
-            for _ in 0..keys_generated {
-                // Rebuild the PRNG state by generating dummy values.
-                let _ = prng.next_u64();
-            }
+        fn new(prng_seed: Option<u64>) -> Self {
+            let prng: Box<dyn CryptoRng> = prng_seed.into();
             RngState {
                 prng,
-                initial_prng_seed: prng_seed,
-                keys_generated,
+                #[cfg(with_getrandom)]
+                testing_seed: prng_seed,
             }
         }
     }
@@ -131,7 +131,7 @@ mod in_mem {
         pub fn new(prng_seed: Option<u64>) -> Self {
             InMemSignerInner {
                 keys: BTreeMap::new(),
-                rng_state: RngState::new(prng_seed, 0),
+                rng_state: RngState::new(prng_seed),
             }
         }
 
@@ -187,7 +187,7 @@ mod in_mem {
             InMemSigner(Arc::new(RwLock::new(InMemSignerInner {
                 keys: BTreeMap::from_iter(input),
                 #[cfg(with_getrandom)]
-                rng_state: RngState::new(None, 0),
+                rng_state: RngState::new(None),
             })))
         }
     }
@@ -232,16 +232,15 @@ mod in_mem {
                 keys: &'a Vec<(AccountOwner, Vec<u8>)>,
                 #[cfg(with_getrandom)]
                 prng_seed: Option<u64>,
-                #[cfg(with_getrandom)]
-                keys_generated: u64,
             }
+
+            #[cfg(with_getrandom)]
+            let prng_seed = self.rng_state.testing_seed;
 
             let inner = Inner {
                 keys: &self.keys(),
                 #[cfg(with_getrandom)]
-                prng_seed: self.rng_state.initial_prng_seed,
-                #[cfg(with_getrandom)]
-                keys_generated: self.rng_state.keys_generated,
+                prng_seed,
             };
 
             Inner::serialize(&inner, serializer)
@@ -258,8 +257,6 @@ mod in_mem {
                 keys: Vec<(AccountOwner, Vec<u8>)>,
                 #[cfg(with_getrandom)]
                 prng_seed: Option<u64>,
-                #[cfg(with_getrandom)]
-                keys_generated: u64,
             }
 
             let inner = Inner::deserialize(deserializer)?;
@@ -277,7 +274,7 @@ mod in_mem {
             let signer = InMemSignerInner {
                 keys,
                 #[cfg(with_getrandom)]
-                rng_state: RngState::new(inner.prng_seed, inner.keys_generated),
+                rng_state: RngState::new(inner.prng_seed),
             };
             Ok(signer)
         }
