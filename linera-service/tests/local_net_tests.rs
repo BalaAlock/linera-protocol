@@ -883,11 +883,6 @@ async fn test_wasm_end_to_end_ethereum_tracker(config: impl LineraNetConfig) -> 
         *user_chain.owner.as_ref().unwrap()
     };
 
-    {
-        let wallet = client.load_wallet()?;
-        let preferred = wallet.assigned_keys.get(&chain);
-        println!("Preferred owner for the chain: {:?}={:?}", chain, preferred);
-    }
     client.change_ownership(chain, vec![], vec![owner1]).await?;
     let (contract, service) = client.build_example("ethereum-tracker").await?;
 

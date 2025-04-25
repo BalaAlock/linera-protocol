@@ -61,7 +61,6 @@ impl chain_listener::ClientContext for ClientContext {
             .wallet
             .get(chain_id)
             .unwrap_or_else(|| panic!("Unknown chain: {}", chain_id));
-        let preferred_owner = self.wallet.assigned_keys.get(&chain_id).copied();
         Ok(self.client.create_chain_client(
             chain_id,
             self.wallet.genesis_admin_chain(),
@@ -69,7 +68,7 @@ impl chain_listener::ClientContext for ClientContext {
             chain.timestamp,
             chain.next_block_height,
             chain.pending_proposal.clone(),
-            preferred_owner,
+            chain.owner,
         ))
     }
 
@@ -88,10 +87,6 @@ impl chain_listener::ClientContext for ClientContext {
                 next_block_height: BlockHeight::ZERO,
                 pending_proposal: None,
             });
-
-            if let Some(owner) = owner {
-                self.wallet.assigned_keys.insert(chain_id, owner);
-            }
         }
 
         Ok(())

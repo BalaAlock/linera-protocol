@@ -272,6 +272,7 @@ where
             chain.timestamp,
             chain.next_block_height,
             chain.pending_proposal,
+            chain.owner,
         ))
     }
 
@@ -282,8 +283,8 @@ where
         timestamp: Timestamp,
         next_block_height: BlockHeight,
         pending_proposal: Option<PendingProposal>,
+        preferred_owner: Option<AccountOwner>,
     ) -> ChainClient<NodeProvider, S> {
-        let preferred_owner = self.wallet().assigned_keys.get(&chain_id).copied();
         let mut chain_client = self.client.create_chain_client(
             chain_id,
             self.wallet.genesis_admin_chain(),
@@ -888,6 +889,7 @@ where
                     certificate.block().header.timestamp,
                     BlockHeight::ZERO,
                     None,
+                    Some(pub_key.into()),
                 );
                 chain_client.set_preferred_owner(pub_key.into());
                 chain_client.process_inbox().await?;

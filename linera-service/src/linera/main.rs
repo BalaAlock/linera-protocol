@@ -1311,10 +1311,6 @@ impl Runnable for Job {
                     "Requesting a new chain for owner {owner} using the faucet at address \
                     {faucet_url}",
                 );
-                context
-                    .wallet_mut()
-                    .mutate(|w| w.add_unassigned_key_pair(public_key))
-                    .await?;
                 let faucet = cli_wrappers::Faucet::new(faucet_url);
                 let outcome = faucet.claim(&owner).await?;
                 let validators = faucet.current_validators().await?;
@@ -1362,10 +1358,6 @@ impl Runnable for Job {
                     "Requesting a new chain for owner {owner} using the faucet at address \
                     {faucet_url}",
                 );
-                context
-                    .wallet_mut()
-                    .mutate(|w| w.add_unassigned_key_pair(public_key))
-                    .await?;
                 let faucet = cli_wrappers::Faucet::new(faucet_url);
                 let outcome = faucet.claim(&owner).await?;
                 let validators = faucet.current_validators().await?;
@@ -2012,14 +2004,9 @@ async fn run(options: &ClientOptions) -> Result<i32, Error> {
 
         ClientCommand::Keygen => {
             let start_time = Instant::now();
-            let mut wallet: linera_client::config::WalletState<persistent::File<Wallet>> =
-                options.wallet().await?;
             let mut signer = options.signer().await?;
             let public_key = signer.mutate(|s| s.generate_new()).await?;
             let owner = AccountOwner::from(public_key);
-            wallet
-                .mutate(|w| w.add_unassigned_key_pair(public_key))
-                .await?;
             println!("{}", owner);
             info!("Key generated in {} ms", start_time.elapsed().as_millis());
             Ok(0)

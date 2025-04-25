@@ -1,13 +1,10 @@
 // Copyright (c) Zefchain Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    iter::IntoIterator,
-};
+use std::{collections::BTreeMap, iter::IntoIterator};
 
 use linera_base::{
-    crypto::{AccountPublicKey, CryptoHash},
+    crypto::CryptoHash,
     data_types::{BlockHeight, Timestamp},
     ensure,
     identifiers::{AccountOwner, ChainDescription, ChainId},
@@ -18,15 +15,12 @@ use linera_core::{
 };
 use linera_storage::Storage;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 
 use crate::{config::GenesisConfig, error, Error};
 
 #[derive(Serialize, Deserialize)]
 pub struct Wallet {
     pub chains: BTreeMap<ChainId, UserChain>,
-    pub unassigned_keys: BTreeSet<AccountOwner>,
-    pub assigned_keys: BTreeMap<ChainId, AccountOwner>,
     pub default: Option<ChainId>,
     pub genesis_config: GenesisConfig,
 }
@@ -43,8 +37,6 @@ impl Wallet {
     pub fn new(genesis_config: GenesisConfig) -> Self {
         Wallet {
             chains: BTreeMap::new(),
-            unassigned_keys: BTreeSet::new(),
-            assigned_keys: BTreeMap::new(),
             default: None,
             genesis_config,
         }
@@ -57,10 +49,6 @@ impl Wallet {
     pub fn insert(&mut self, chain: UserChain) {
         if self.default.is_none() {
             self.default = Some(chain.chain_id);
-        }
-
-        if let Some(configured_owner) = chain.owner {
-            self.assigned_keys.insert(chain.chain_id, configured_owner);
         }
 
         self.chains.insert(chain.chain_id, chain);
@@ -77,8 +65,6 @@ impl Wallet {
             .take()
             .ok_or(error::Inner::NonexistentKeypair(*chain_id))?;
 
-        self.assigned_keys.remove(chain_id);
-
         Ok(owner)
     }
 
@@ -87,7 +73,6 @@ impl Wallet {
             .chains
             .remove(chain_id)
             .ok_or::<Error>(error::Inner::NonexistentChain(*chain_id).into())?;
-        self.assigned_keys.remove(chain_id);
         Ok(user_chain)
     }
 
@@ -119,19 +104,12 @@ impl Wallet {
         self.chains.values_mut()
     }
 
-    pub fn add_unassigned_key_pair(&mut self, public_key: AccountPublicKey) {
-        self.unassigned_keys.insert(AccountOwner::from(public_key));
-    }
-
     pub fn assign_new_chain_to_owner(
         &mut self,
         owner: AccountOwner,
         chain_id: ChainId,
         timestamp: Timestamp,
     ) -> Result<(), Error> {
-        if !self.unassigned_keys.remove(&owner) {
-            return Err(error::Inner::NonexistentKeypair(chain_id).into());
-        }
         let user_chain = UserChain {
             chain_id,
             owner: Some(owner),
@@ -162,14 +140,6 @@ impl Wallet {
         S: Storage + Clone + Send + Sync + 'static,
     {
         let client_owner = chain_client.preferred_owner();
-        let wallet_owner = self.assigned_keys.get(&chain_client.chain_id()).cloned();
-        if client_owner != wallet_owner {
-            warn!(
-                ?client_owner,
-                ?wallet_owner,
-                "Chain client has different owner than wallet. Overwriting wallet."
-            );
-        }
         let state = chain_client.state();
         self.insert(UserChain {
             chain_id: chain_client.chain_id(),
